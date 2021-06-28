@@ -80,6 +80,7 @@ EYE_PRBS_TARGET_NIC = 3
 SWITCH_COUNT_MANUAL = "manual"
 SWITCH_COUNT_AUTO = "auto"
 
+EVENTLOG_PAYLOAD_SIZE = 18
 FIRMWARE_INFO_PAYLOAD_SIZE = 48
 NUM_MCU_SIDE = 3
 
@@ -96,6 +97,95 @@ MAX_NUM_LANES = 4
 SWITCHING_MODE_MANUAL = 0
 SWITCHING_MODE_AUTO = 1
 
+# definition of VSC command byte
+VSC_BYTE_OPCODE                  = 128
+VSC_BYTE_STATUS                  = 129
+VSC_BYTE_ADDR0                   = 130
+VSC_BYTE_ADDR1                   = 131
+VSC_BYTE_ADDR2                   = 132
+VSC_BYTE_ADDR3                   = 133
+VSC_BYTE_DATA0                   = 134
+VSC_BYTE_DATA1                   = 135
+VSC_BYTE_DATA2                   = 136
+VSC_BYTE_DATA3                   = 137
+VSC_BYTE_CHKSUM_LSB              = 138
+VSC_BYTE_CHKSUM_MSB              = 139
+VSC_BYTE_OPTION                  = 140
+
+# firmware upgrade command options
+FWUPD_OPTION_GET_INFO            = 0x01
+FWUPD_OPTION_START               = 0x02
+FWUPD_OPTION_LOCAL_XFER          = 0x03
+FWUPD_OPTION_LOCAL_XFER_COMPLETE = 0x04
+FWUPD_OPTION_UART_XFER           = 0x05
+FWUPD_OPTION_UART_XFER_STATUS    = 0x06
+FWUPD_OPTION_RUN                 = 0x07
+FWUPD_OPTION_COMMIT              = 0x08
+FWUPD_OPTION_SYNC                = 0x09
+FWUPD_OPTION_SYNC_STATUS         = 0x0A
+
+# eventlog command option
+EVENTLOG_OPTION_DUMP             = 0x01
+EVENTLOG_OPTION_CLEAR            = 0x02
+
+# upper page 0xFA VSC command attribute length
+VSC_CMD_ATTRIBUTE_LENGTH         = 141
+
+VSC_BUFF_SIZE                    = 512
+
+BLOCK_WRITE_LENGTH               = 32
+
+# definition of MIS memorymap page
+MIS_PAGE_VSC                     = 0xFA
+MIS_PAGE_FC                      = 0xFC
+
+# VSC opcode
+VSC_OPCODE_FWUPD                 = 0x80
+VSC_OPCODE_EVENTLOG              = 0x81
+
+# MCU error code
+MCU_EC_NO_ERROR                         = 0
+MCU_EC_GET_FW_INFO_ERROR                = 11
+MCU_EC_UART_TX_BUSY                     = 13
+MCU_EC_FWUPD_ABORT                      = 14
+MCU_EC_FWUPD_HEADER_CRC_ERROR           = 15
+MCU_EC_FWUPD_META_CRC_ERROR             = 16
+MCU_EC_FWUPD_MCU_CRC_ERROR              = 17
+MCU_EC_FWUPD_DSP_CRC_ERROR              = 18
+MCU_EC_FWUPD_SCRIPT_CRC_ERROR           = 19
+MCU_EC_FWUPD_COMPLETE_ERROR             = 20
+MCU_EC_FWUPD_COMMIT_ERROR               = 21
+MCU_EC_INVALID_EVENT_LOG                = 22
+MCU_EC_FWUPD_UART_TIMEOUT               = 26
+MCU_EC_FWUPD_INVALID_SEQUENCE           = 27
+MCU_EC_FWUPD_SYNC_ERROR                 = 28
+MCU_EC_FWUPD_ABORT_FROM_THER_OTHER_SIDE = 30
+MCU_EC_FWUPD_IMAGE_SIZE_ERROR           = 31
+MCU_EC_WAIT_VSC_STATUS_TIMEOUT          = 254
+MCU_EC_UNDEFINED_ERROR                  = 255
+
+MCU_ERROR_CODE_STRING = {
+    MCU_EC_NO_ERROR                        :'No Error',
+    MCU_EC_GET_FW_INFO_ERROR               :'Get Firmware Info Error',
+    MCU_EC_UART_TX_BUSY                    :'UART TX Busy',
+    MCU_EC_FWUPD_ABORT                     :'Firmware Update Abort',
+    MCU_EC_FWUPD_HEADER_CRC_ERROR          :'Firmware Update Header CRC Error',
+    MCU_EC_FWUPD_META_CRC_ERROR            :'Firmware Update Meta CRC Error',
+    MCU_EC_FWUPD_MCU_CRC_ERROR             :'Firmware Update MCU CRC Error',
+    MCU_EC_FWUPD_DSP_CRC_ERROR             :'Firmware Update DSP CRC Error',
+    MCU_EC_FWUPD_SCRIPT_CRC_ERROR          :'Firmware Update Script CRC Error',
+    MCU_EC_FWUPD_COMPLETE_ERROR            :'Firmware Update Local Transfer Error',
+    MCU_EC_FWUPD_COMMIT_ERROR              :'Firmware Update Commit Error',
+    MCU_EC_INVALID_EVENT_LOG               :'Invalid Event Log',
+    MCU_EC_FWUPD_UART_TIMEOUT              :'Firmware Update UART Timeout',
+    MCU_EC_FWUPD_INVALID_SEQUENCE          :'Invalid Firmware Update Sequence',
+    MCU_EC_FWUPD_SYNC_ERROR                :'Firmware Synchronization Error',
+    MCU_EC_FWUPD_ABORT_FROM_THER_OTHER_SIDE:'Firmware Update Abort from the Other Side',
+    MCU_EC_FWUPD_IMAGE_SIZE_ERROR          :'Firmware Update Image Size Error',
+    MCU_EC_WAIT_VSC_STATUS_TIMEOUT         :'Wait VSC Status Timeout',
+    MCU_EC_UNDEFINED_ERROR                 :'Undefined Error',
+}
+
 # Valid return codes for upgrade firmware routine steps
 FIRMWARE_DOWNLOAD_SUCCESS = 0
 FIRMWARE_DOWNLOAD_FAILURE = 1
@@ -103,6 +193,8 @@ FIRMWARE_ACTIVATE_SUCCESS = 0
 FIRMWARE_ACTIVATE_FAILURE = 1
 FIRMWARE_ROLLBACK_SUCCESS = 0
 FIRMWARE_ROLLBACK_FAILURE = 1
+FIRMWARE_SYNCHRONIZE_SUCCESS = 0
+FIRMWARE_SYNCHRONIZE_FAILURE = 1
 
 SYSLOG_IDENTIFIER = "sonic_y_cable"
 
@@ -657,6 +749,12 @@ def enable_prbs_mode(physical_port, target, mode_value, lane_map):
             physical_port).write_eeprom(curr_offset, 1, buffer)
         if result is False:
             return result
+        buffer = bytearray([0])
+        curr_offset = OFFSET_ENABLE_PRBS
+        result = platform_chassis.get_sfp(
+            physical_port).write_eeprom(curr_offset, 1, buffer)
+        if result is False:
+            return result
         buffer = bytearray([mode_value])
         curr_offset = OFFSET_CONFIGURE_PRBS_TYPE
         result = platform_chassis.get_sfp(
@@ -1187,7 +1285,113 @@ def check_if_nic_lanes_active(physical_port):
 
 
 @hook_y_cable_simulator
+def clear_event_log(physical_port):
+    """ This routine clear all event logs.
+
+    Args:
+        physical_port:
+             an Integer, the actual physical port connected to a Y cable
+
+    Returns:
+        an Boolean, true if succeeded and false if it did not succeed.
+    """
+
+    vsc_req_form = [None] * (VSC_CMD_ATTRIBUTE_LENGTH)
+    vsc_req_form[VSC_BYTE_OPCODE] = VSC_OPCODE_EVENTLOG
+    vsc_req_form[VSC_BYTE_OPTION] = EVENTLOG_OPTION_CLEAR
+    status = send_vsc_cmd(physical_port, vsc_req_form)
+    if status != MCU_EC_NO_ERROR:
+        helper_logger.log_error('Clear event log error (error code:0x%04X)' % (status))
+        return False
+
+    return True
+
+
+@hook_y_cable_simulator
+def get_event_log(physical_port, last_read_id = -1):
+    """ This routine returns the events newer than the last read event id.
+
+    Args:
+        physical_port:
+             an Integer, the actual physical port connected to a Y cable
+        last_read_id:
+             an Integer, the last read event id, download all events if it is set to -1 (default option)
+
+    Returns:
+        a List:
+             return a list of event logs or None if download event log failed.
+    """
+    result = []
+
+    event_type_str = {
+                    0x0000:'EventLog Header',
+                    0x0001:'Auto Switch',
+                    0x0002:'Manual Switch',
+                    0x0003:'BER Measurement',
+                    0x0004:'PRBS Generation',
+                    0x0005:'Loopback Mode',
+                    0x0006:'Eye Measurement',
+                    0x0007:'Epoch Time',
+                    0x0008:'Temperature',
+                    0x0009:'Voltage',
+                    0x0100:'Link Down',
+                    0x0200:'Firmware Update',
+               }
+
+    while (True):
+        vsc_req_form = [None] * (VSC_CMD_ATTRIBUTE_LENGTH)
+        vsc_req_form[VSC_BYTE_OPCODE] = VSC_OPCODE_EVENTLOG
+        vsc_req_form[VSC_BYTE_OPTION] = EVENTLOG_OPTION_DUMP
+        vsc_req_form[VSC_BYTE_ADDR0]  = (last_read_id >> 0)  & 0xFF
+        vsc_req_form[VSC_BYTE_ADDR1]  = (last_read_id >> 8)  & 0xFF
+        vsc_req_form[VSC_BYTE_ADDR2]  = (last_read_id >> 16) & 0xFF
+        vsc_req_form[VSC_BYTE_ADDR3]  = (last_read_id >> 24) & 0xFF
+        status = send_vsc_cmd(physical_port, vsc_req_form)
+
+        if status == MCU_EC_NO_ERROR:
+            fetch_cnt = read_mmap(physical_port, MIS_PAGE_VSC, 134)
+            if (fetch_cnt == 0): break
+        else:
+            helper_logger.log_error("download event log error(error code:%04X)" % (status))
+            return None
+
+        event_data = bytearray(EVENTLOG_PAYLOAD_SIZE * fetch_cnt)
+
+        for byte_offset in range(0, EVENTLOG_PAYLOAD_SIZE * fetch_cnt):
+            byte_data = read_mmap(physical_port, MIS_PAGE_FC, 128 + byte_offset)
+            event_data[byte_offset] = byte_data
+
+        for curr_idx in range(0, fetch_cnt):
+            byte_offset = curr_idx * EVENTLOG_PAYLOAD_SIZE
+            event_id    = struct.unpack_from('<H', event_data[byte_offset +  0 : byte_offset +  2])[0]
+            epoch       = struct.unpack_from('<I', event_data[byte_offset +  2 : byte_offset +  6])[0]
+            epoch_ms    = struct.unpack_from('<H', event_data[byte_offset +  6 : byte_offset +  8])[0]
+            event_type  = struct.unpack_from('<H', event_data[byte_offset +  8 : byte_offset + 10])[0]
+            detail1     = struct.unpack_from('<I', event_data[byte_offset + 10 : byte_offset + 14])[0]
+            detail2     = struct.unpack_from('<I', event_data[byte_offset + 14 : byte_offset + 18])[0]
+
+            if epoch != 0xFFFFFFFF:
+                entry = {}
+
+                entry['EventId'] = event_id
+                entry['Timestamp'] = time.strftime('%Y-%m-%d %H:%M:%S', time.gmtime(epoch)) + '.%03d' % (epoch_ms)
+                entry['EventType'] = event_type_str[event_type]
+                entry['Detail1'] = detail1
+                entry['Detail2'] = detail2
+
+                result.append(entry)
+
+                last_read_id = event_id
+
+    return result
+
+
+@hook_y_cable_simulator
 def get_firmware_version(physical_port, target):
+    vsc_req_form = [None] * (VSC_CMD_ATTRIBUTE_LENGTH)
+    vsc_req_form[VSC_BYTE_OPCODE] = VSC_OPCODE_FWUPD
+    vsc_req_form[VSC_BYTE_OPTION] = FWUPD_OPTION_GET_INFO
+    send_vsc_cmd(physical_port, vsc_req_form)
 
     data = bytearray(FIRMWARE_INFO_PAYLOAD_SIZE)
 
@@ -1399,11 +1603,116 @@ def download_firmware(physical_port, fwfile):
              or an error code as to what was the cause of firmware download failure
     """
 
+    inFile = open(fwfile, 'rb')
+    fwImage = bytearray(inFile.read())
+    inFile.close()
+
+    '''
+    Firmware update start
+    '''
+    vsc_req_form = [None] * (VSC_CMD_ATTRIBUTE_LENGTH)
+    vsc_req_form[VSC_BYTE_OPCODE] = VSC_OPCODE_FWUPD
+    vsc_req_form[VSC_BYTE_OPTION] = FWUPD_OPTION_START
+    status = send_vsc_cmd(physical_port, vsc_req_form)
+    if status != MCU_EC_NO_ERROR:
+        helper_logger.log_error("Start firmware download error (error code:0x%04X)" % status)
+        return FIRMWARE_DOWNLOAD_FAILURE
+
+    '''
+    Transfer firmwre image to local side MCU
+    '''
+    total_chunk = len(fwImage) // VSC_BUFF_SIZE
+    chunk_idx = 0
+    retry_count = 0
+    while chunk_idx < total_chunk:
+        checksum = 0
+        fw_img_offset = chunk_idx * VSC_BUFF_SIZE
+        for byte_offset in range(VSC_BUFF_SIZE):
+            checksum += fwImage[fw_img_offset]
+            fw_img_offset += 1
+            if (((byte_offset + 1) % BLOCK_WRITE_LENGTH) == 0):
+                page = MIS_PAGE_FC + byte_offset // 128
+                byte = 128 + ((byte_offset + 1) - BLOCK_WRITE_LENGTH) % 128
+                write_mmap(physical_port, page, byte, bytearray(fwImage[fw_img_offset - BLOCK_WRITE_LENGTH: fw_img_offset]), BLOCK_WRITE_LENGTH)
+
+        fw_img_offset = chunk_idx * VSC_BUFF_SIZE
+        vsc_req_form = [None] * (VSC_CMD_ATTRIBUTE_LENGTH)
+        vsc_req_form[VSC_BYTE_OPCODE]     = VSC_OPCODE_FWUPD
+        vsc_req_form[VSC_BYTE_OPTION]     = FWUPD_OPTION_LOCAL_XFER
+        vsc_req_form[VSC_BYTE_ADDR0]      = (fw_img_offset >> 0) & 0xFF
+        vsc_req_form[VSC_BYTE_ADDR1]      = (fw_img_offset >> 8) & 0xFF
+        vsc_req_form[VSC_BYTE_ADDR2]      = (fw_img_offset >> 16) & 0xFF
+        vsc_req_form[VSC_BYTE_ADDR3]      = (fw_img_offset >> 24) & 0xFF
+        vsc_req_form[VSC_BYTE_CHKSUM_MSB] = (checksum >> 8) & 0xFF
+        vsc_req_form[VSC_BYTE_CHKSUM_LSB] = (checksum >> 0) & 0xFF
+        status = send_vsc_cmd(physical_port, vsc_req_form)
+
+        if status == MCU_EC_NO_ERROR:
+            chunk_idx += 1
+            retry_count = 0
+        else:
+            helper_logger.log_error ('Firmware binary transfer error (error code:%04X)' % (status))
+
+            if retry_count == 3:
+                helper_logger.log_error ('Maximum firmware transfer retry exceeded, abort firmware transfer')
+                return FIRMWARE_DOWNLOAD_FAILURE
+            retry_count += 1
+
+    '''
+    Complete the local side firmware transferring
+    '''
+    vsc_req_form = [None] * (VSC_CMD_ATTRIBUTE_LENGTH)
+    vsc_req_form[VSC_BYTE_OPCODE] = VSC_OPCODE_FWUPD
+    vsc_req_form[VSC_BYTE_OPTION] = FWUPD_OPTION_LOCAL_XFER_COMPLETE
+    status = send_vsc_cmd(physical_port, vsc_req_form)
+    if status != MCU_EC_NO_ERROR:
+        helper_logger.log_error ('Veriyf firmware binary error (error code:0x%04X)' % (status))
+        return FIRMWARE_DOWNLOAD_FAILURE
+
+    '''
+    transfer firmware image from local side MCU to the other two via UART
+    '''
+    vsc_req_form = [None] * (VSC_CMD_ATTRIBUTE_LENGTH)
+    vsc_req_form[VSC_BYTE_OPCODE] = VSC_OPCODE_FWUPD
+    vsc_req_form[VSC_BYTE_OPTION] = FWUPD_OPTION_UART_XFER
+    status = send_vsc_cmd(physical_port, vsc_req_form)
+    if status != MCU_EC_NO_ERROR:
+        helper_logger.log_error ('Firmware binary UART transfer error (error code:0x%04X)' % (status))
+        return FIRMWARE_DOWNLOAD_FAILURE
+
+    vsc_req_form = [None] * (VSC_CMD_ATTRIBUTE_LENGTH)
+    vsc_req_form[VSC_BYTE_OPCODE] = VSC_OPCODE_FWUPD
+    vsc_req_form[VSC_BYTE_OPTION] = FWUPD_OPTION_UART_XFER_STATUS
+    status = send_vsc_cmd(physical_port, vsc_req_form)
+    if status != MCU_EC_NO_ERROR:
+        helper_logger.log_error ('Get firmware binary UART transfer status error (error code:0x%04X)' % (status))
+        return FIRMWARE_DOWNLOAD_FAILURE
+
+    busy        = read_mmap(physical_port, MIS_PAGE_FC, 128)
+    #percentNIC  = read_mmap(physical_port, MIS_PAGE_FC, 129)
+    #percentTOR1 = read_mmap(physical_port, MIS_PAGE_FC, 130)
+    #percentTOR2 = read_mmap(physical_port, MIS_PAGE_FC, 131)
+
+    while busy != 0:
+        vsc_req_form = [None] * (VSC_CMD_ATTRIBUTE_LENGTH)
+        vsc_req_form[VSC_BYTE_OPCODE] = VSC_OPCODE_FWUPD
+        vsc_req_form[VSC_BYTE_OPTION] = FWUPD_OPTION_UART_XFER_STATUS
+        status = send_vsc_cmd(physical_port, vsc_req_form)
+        if status != MCU_EC_NO_ERROR:
+            helper_logger.log_error ('Get firmware binary UART transfer status error (error code:0x%04X)' % (status))
+            return FIRMWARE_DOWNLOAD_FAILURE
+
+        time.sleep(0.2)
+        busy        = read_mmap(physical_port, MIS_PAGE_FC, 128)
+        #percentNIC  = read_mmap(physical_port, MIS_PAGE_FC, 129)
+        #percentTOR1 = read_mmap(physical_port, MIS_PAGE_FC, 130)
+        #percentTOR2 = read_mmap(physical_port, MIS_PAGE_FC, 131)
+
     return FIRMWARE_DOWNLOAD_SUCCESS
 
 
 @hook_y_cable_simulator
-def activate_firmware(physical_port):
+def activate_firmware(physical_port, hitless = 0):
     """ This routine should activate the downloaded firmware on all the
     components of the Y cable of the port specified.
     This API is meant to be used in conjunction with download_firmware API, and
@@ -1415,11 +1724,45 @@ def activate_firmware(physical_port):
     Args:
         physical_port:
              an Integer, the actual physical port connected to a Y cable
+
+        hitless:
+             an Integer, set it to 1 to perform hitless firmware upgrade
+
     Returns:
         an Integer:
              a predefined code stating whether the firmware activate was successful
              or an error code as to what was the cause of firmware activate failure
     """
+
+    """
+        side:
+            an Integer, the destionation to be applied to.
+             0bit: NIC
+             1bit: TOR1
+             2bit: TOR2
+    """
+
+    side = 0x7
+
+    vsc_req_form = [None] * (VSC_CMD_ATTRIBUTE_LENGTH)
+    vsc_req_form[VSC_BYTE_OPTION] = FWUPD_OPTION_COMMIT
+    vsc_req_form[VSC_BYTE_OPCODE] = VSC_OPCODE_FWUPD
+    vsc_req_form[VSC_BYTE_ADDR0]  = side
+    status = send_vsc_cmd(physical_port, vsc_req_form)
+    if status != MCU_EC_NO_ERROR:
+        helper_logger.log_error ('Firmware commit error (error code:0x%04X)' % (status))
+        return FIRMWARE_ACTIVATE_FAILURE
+
+    vsc_req_form = [None] * (VSC_CMD_ATTRIBUTE_LENGTH)
+    vsc_req_form[VSC_BYTE_OPTION] = FWUPD_OPTION_RUN
+    vsc_req_form[VSC_BYTE_OPCODE] = VSC_OPCODE_FWUPD
+    vsc_req_form[VSC_BYTE_ADDR0]  = side
+    vsc_req_form[VSC_BYTE_ADDR1]  = hitless
+    status = send_vsc_cmd(physical_port, vsc_req_form)
+    time.sleep(5)
+    if status != MCU_EC_NO_ERROR:
+        helper_logger.log_error ('Firmware activate error (error code:0x%04X)' % (status))
+        return FIRMWARE_ACTIVATE_FAILURE
 
     return FIRMWARE_ACTIVATE_SUCCESS
 
@@ -1439,6 +1782,8 @@ def rollback_firmware(physical_port):
              a predefined code stating whether the firmware rollback was successful
              or an error code as to what was the cause of firmware rollback failure
     """
+
+    activate_firmware(physical_port)
 
     return FIRMWARE_ROLLBACK_SUCCESS
 
@@ -1528,3 +1873,123 @@ def get_switching_mode(physical_port):
         return SWITCHING_MODE_AUTO
     else:
         return SWITCHING_MODE_MANUAL
+
+def write_mmap(physical_port, page, byte, value, len = 1):
+    """
+    This API specifically converts MIS memory map page and offset to a contiguous block address
+    to write the eeprom.
+
+    Args:
+         physical_port:
+             an Integer, the actual physical port connected to a Y cable
+
+         page:
+             an Integer, page number of memorymap
+
+         byte:
+             an Integer, byte address of the page
+
+         value:
+             an Integer or bytearray, value to be written to the address
+
+         len:
+             an Integer, length to be written
+
+    Returns:
+        an Boolean, true if succeeded and false if it did not succeed.
+    """
+
+    if byte < 128:
+        linear_addr = byte
+    else:
+        linear_addr = page * 128 + byte
+
+    if len == 1:
+        ba = bytearray([value])
+    else:
+        ba = value
+
+    ret = platform_chassis.get_sfp(physical_port).write_eeprom(linear_addr, len, ba)
+
+    if (ret == False):
+        helper_logger.log_error('Memorymap write failed, page:0x%02X byte:0x%02X value:0x%02X' % (page, byte, value))
+
+    return ret
+
+def read_mmap(physical_port, page, byte, len = 1):
+    """
+    This API specifically converts MIS memory map page and offset to a contiguous block address, then returns the value of
+    the eeprom address
+
+    Args:
+         physical_port:
+             an Integer, the actual physical port connected to a Y cable
+
+         page:
+             an Integer, page number of memorymap
+
+         byte:
+             an Integer, byte address of the page
+
+         len:
+             an Integer, length of the reading
+
+    Returns:
+        an Integer or bytearray, returns the value of the specified eeprom addres, returns 0xFF if it did not succeed
+    """
+
+    if byte < 128:
+        linear_addr = byte
+    else:
+        linear_addr = page * 128 + byte
+
+    ret = platform_chassis.get_sfp(physical_port).read_eeprom(linear_addr, len)
+
+    if ret is None:
+        helper_logger.log_error('Memorymap Read Nack!  page:0x%02X byte:0x%02X' % (page, byte))
+        return 0xFF
+    else:
+        if len == 1:
+            try:
+                return ret[0]
+            except Exception as e:
+                helper_logger.log_error('Unknown read_mmap error')
+                return 0xFF
+        else:
+            return ret
+
+def send_vsc_cmd(physical_port, vsc_req_form, timeout = 1200):
+    """
+    This routine sends the vsc payload to MCU and returns the status code
+
+    Args:
+         vsc_req_form:
+             a bytearray, command request form follow by vsc command structure
+
+         timeout:
+             an Integer, number of 5ms delay time, default value is 1200 (6 seconds).
+
+    Returns:
+        an Integer, status code of vsc command.
+    """
+
+    for idx in range(129, VSC_CMD_ATTRIBUTE_LENGTH):
+        if vsc_req_form[idx] != None:
+            write_mmap(physical_port, MIS_PAGE_VSC, idx, vsc_req_form[idx])
+    write_mmap(physical_port, MIS_PAGE_VSC, VSC_BYTE_OPCODE, vsc_req_form[VSC_BYTE_OPCODE])
+
+    while True:
+        done = read_mmap(physical_port, MIS_PAGE_VSC, VSC_BYTE_OPCODE)
+        if done == 0:
+            break
+
+        time.sleep(0.005)
+        timeout -= 1
+
+        if timeout == 0:
+            helper_logger.log_error("wait vsc status value timeout")
+            return MCU_EC_WAIT_VSC_STATUS_TIMEOUT
+
+    status = read_mmap(physical_port, MIS_PAGE_VSC, VSC_BYTE_STATUS)
+
+    return status
